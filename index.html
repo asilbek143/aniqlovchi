@@ -468,6 +468,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 </div>
 
 <script>
+// ======== SAFETY NET ========
+window.onerror = function(msg,src,line,col,err){
+  // If anything crashes, still hide boot and show app
+  const boot=document.getElementById('boot');
+  if(boot && boot.style.display!=='none'){
+    boot.style.display='none';
+  }
+  console.warn('Handled error:',msg,line);
+  return true;
+};
+// Absolute fallback: if boot not gone in 6s, force remove it
+setTimeout(()=>{
+  const boot=document.getElementById('boot');
+  if(boot && boot.style.display!=='none'){
+    boot.style.display='none';
+    try{init();}catch(e){}
+  }
+},6000);
+
 // ======== BOOT ========
 const BMSG=[
   'NEYRON YADRO ISHGA TUSHIRILMOQDA...',
@@ -482,15 +501,16 @@ const BMSG=[
 let bi=0;
 function runBoot(){
   if(bi>=BMSG.length){
-    document.getElementById('boot').classList.add('out');
-    setTimeout(()=>{document.getElementById('boot').style.display='none';init();},720);
+    const bootEl=document.getElementById('boot');
+    bootEl.classList.add('out');
+    setTimeout(()=>{bootEl.style.display='none'; try{init();}catch(e){console.error(e);}},600);
     return;
   }
   document.getElementById('btxt').textContent=BMSG[bi];
   const p=Math.round((bi+1)/BMSG.length*100);
   document.getElementById('bbar').style.width=p+'%';
   document.getElementById('bpct').textContent=p+'%';
-  bi++; setTimeout(runBoot,270);
+  bi++; setTimeout(runBoot,180);
 }
 setTimeout(runBoot,200);
 
@@ -565,7 +585,7 @@ function applyConn(conn){
     cellular:{n:'Mobil',i:'📡',d:'Mobil internet'},
     bluetooth:{n:'Bluetooth',i:'🔵',d:'Bluetooth'},
     none:{n:'Ulanmagan',i:'❌',d:'Internet yo\'q'},
-    unknown:{n:'Noma\'lum',i:'❓',d:'Tur aniqlanmadi'}};
+    unknown:{n:'Noma`lum',i:'❓',d:'Tur aniqlanmadi'}};
   const em={'slow-2g':{n:'2G Sekin',s:-88},'2g':{n:'2G',s:-80},'3g':{n:'3G',s:-70},'4g':{n:'4G/WiFi',s:-55}};
   const ti=tm[conn.type]||tm.unknown;
   const ei=em[conn.effectiveType]||em['4g'];
@@ -587,7 +607,7 @@ function applyConn(conn){
   if(conn.type==='wifi'){
     SIG=ei.s+ri(-5,5);
     document.getElementById('wico').textContent='📶';
-    document.getElementById('ssid').textContent='WiFi Tarmog\'i';
+    document.getElementById('ssid').textContent='WiFi Tarmog`i';
     showBadge(false);
   } else if(conn.type==='cellular'){
     SIG=ei.s;
@@ -607,7 +627,7 @@ function showBadge(sim){
   const b=document.getElementById('mbadge');
   b.style.display='inline-flex';
   b.className='mbadge '+(sim?'sim':'real');
-  document.getElementById('mbadge-txt').textContent=sim?'SIMULYATSIYA':'HAQIQIY MA\'LUMOT';
+  document.getElementById('mbadge-txt').textContent=sim?'SIMULYATSIYA':'HAQIQIY MA`LUMOT';
 }
 
 // ======== IPAPI - REAL ISP DATA ========
@@ -627,7 +647,7 @@ async function fetchISP(){
       if(d.org || d.asn){
         applyISP({
           ip: d.ip || '',
-          isp: d.org || d.asn || 'Noma'lum',
+          isp: d.org || d.asn || 'Noma`lum',
           city: (d.city||'') + (d.region ? ', '+d.region : ''),
           country: d.country_name || d.country || '',
           countryCode: d.country_code || d.country || 'UZ',
@@ -642,7 +662,7 @@ async function fetchISP(){
       if(d.isp){
         applyISP({
           ip: d.query || '',
-          isp: d.isp || d.org || 'Noma'lum',
+          isp: d.isp || d.org || 'Noma`lum',
           city: (d.city||'') + (d.regionName ? ', '+d.regionName : ''),
           country: d.country || '',
           countryCode: d.countryCode || 'UZ',
@@ -669,7 +689,7 @@ function applyISP(info){
   // City + country
   let cityTxt = info.city || '';
   if(info.country && !cityTxt.includes(info.country)) cityTxt += (cityTxt?', ':'')+info.country;
-  document.getElementById('isp-city').textContent = cityTxt || 'Noma'lum';
+  document.getElementById('isp-city').textContent = cityTxt || 'Noma`lum';
   
   // Flag emoji from country code
   const cc = (info.countryCode||'UZ').toUpperCase();
@@ -708,8 +728,8 @@ function applyISP(info){
   
   // Update SSID card with real ISP
   const ssidEl = document.getElementById('ssid');
-  if(ssidEl.textContent === 'QIDIRILMOQDA...' || ssidEl.textContent === 'WiFi Tarmog'i'){
-    ssidEl.textContent = ispName + ' Tarmog'i';
+  if(ssidEl.textContent === 'QIDIRILMOQDA...' || ssidEl.textContent === 'WiFi Tarmog`i'){
+    ssidEl.textContent = ispName + ' Tarmog`i';
   }
   
   // Update HUD pill
@@ -740,17 +760,26 @@ async function measurePing(){
 // ======== INIT ========
 function init(){
   initParticles();
+  // Launch immediately with default coords, then update if geo available
+  launch();
+  // Try geolocation in background - update map if granted
   if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(
-      p=>{LAT=p.coords.latitude;LNG=p.coords.longitude;launch();},
-      ()=>document.getElementById('pp').classList.add('show'),
-      {timeout:5000}
+      p=>{
+        LAT=p.coords.latitude; LNG=p.coords.longitude;
+        if(map){ map.setView([LAT,LNG],15); }
+        document.getElementById('cp').textContent=`KEN ${LAT.toFixed(4)} / UZU ${LNG.toFixed(4)}`;
+      },
+      ()=>{}, // silent fail - already launched
+      {timeout:6000, maximumAge:60000}
     );
-  } else document.getElementById('pp').classList.add('show');
+  }
 }
-function startDemo(){document.getElementById('pp').classList.remove('show');launch();}
+function startDemo(){document.getElementById('pp').classList.remove('show');}
 
 function launch(){
+  // Hide any popup immediately
+  document.getElementById('pp').classList.remove('show');
   const conn=getRealConn();
   if(conn) applyConn(conn);
   else {setupSim();showBadge(true);}
@@ -791,7 +820,7 @@ function launch(){
 }
 
 function setupSim(){
-  const ss=['QORONG\'I-TAR-5G','KORP_XAVFSIZ','UY-TARMOG\'I-Pro','KVANT-TO\'R','KIBER-GRID'];
+  const ss=['QORONG\'I-TAR-5G','KORP_XAVFSIZ','UY-TARMOG`I-Pro','KVANT-TO`R','KIBER-GRID'];
   document.getElementById('ssid').textContent=ss[ri(0,ss.length)];
   document.getElementById('bssid').textContent=`BSSID: ${[1,2,3,4,5,6].map(()=>h2()).join(':')}`;
   SIG=ri(-82,-45); updateSig();
@@ -816,9 +845,9 @@ function updateSig(){
   const qEl=document.getElementById('sigq');
   if(pct<20){qEl.textContent='JUDA ZAIF';qEl.style.color='var(--np)'}
   else if(pct<40){qEl.textContent='ZAIF';qEl.style.color='var(--np)'}
-  else if(pct<60){qEl.textContent='O\'RTA';qEl.style.color='var(--ny)'}
+  else if(pct<60){qEl.textContent='O`RTA';qEl.style.color='var(--ny)'}
   else if(pct<80){qEl.textContent='YAXSHI';qEl.style.color='var(--nb)'}
-  else{qEl.textContent='A\'LO DARAJALI';qEl.style.color='var(--ng)'}
+  else{qEl.textContent='A`LO DARAJALI';qEl.style.color='var(--ng)'}
 }
 
 function updatePingUI(p){
