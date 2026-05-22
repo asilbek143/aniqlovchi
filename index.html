@@ -3,1619 +3,765 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NETPULSE // WiFi Coverage Matrix</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
+<title>NETPULSE // WiFi Matrisi</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  :root {
-    --neon-blue: #00d4ff;
-    --neon-green: #00ff88;
-    --neon-pink: #ff0080;
-    --neon-yellow: #ffee00;
-    --dark-bg: #020a12;
-    --dark-card: rgba(0, 20, 40, 0.7);
-    --dark-border: rgba(0, 212, 255, 0.2);
-    --grid-color: rgba(0, 212, 255, 0.05);
-    --text-primary: #e0f4ff;
-    --text-muted: rgba(0, 212, 255, 0.5);
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: var(--dark-bg);
-    color: var(--text-primary);
-    font-family: 'Share Tech Mono', monospace;
-    overflow-x: hidden;
-    min-height: 100vh;
-    cursor: crosshair;
-  }
-
-  /* Animated grid background */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(var(--grid-color) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
-    background-size: 40px 40px;
-    animation: gridShift 20s linear infinite;
-    z-index: 0;
-    pointer-events: none;
-  }
-
-  body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: radial-gradient(ellipse at 20% 50%, rgba(0,80,160,0.08) 0%, transparent 60%),
-                radial-gradient(ellipse at 80% 20%, rgba(0,212,255,0.05) 0%, transparent 50%);
-    z-index: 0;
-    pointer-events: none;
-  }
-
-  @keyframes gridShift {
-    0% { transform: translate(0,0); }
-    100% { transform: translate(40px,40px); }
-  }
-
-  /* SCANLINE overlay */
-  .scanlines {
-    position: fixed;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0,0,0,0.1) 2px,
-      rgba(0,0,0,0.1) 4px
-    );
-    z-index: 1;
-    pointer-events: none;
-    animation: scanMove 8s linear infinite;
-  }
-
-  @keyframes scanMove {
-    0% { background-position: 0 0; }
-    100% { background-position: 0 200px; }
-  }
-
-  /* HEADER */
-  header {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    z-index: 100;
-    padding: 0 24px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: rgba(2,10,18,0.9);
-    border-bottom: 1px solid var(--dark-border);
-    backdrop-filter: blur(20px);
-  }
-
-  .logo {
-    font-family: 'Orbitron', monospace;
-    font-weight: 900;
-    font-size: 1.3rem;
-    color: var(--neon-blue);
-    text-shadow: 0 0 20px var(--neon-blue), 0 0 40px rgba(0,212,255,0.3);
-    letter-spacing: 4px;
-  }
-
-  .logo span { color: var(--neon-green); text-shadow: 0 0 20px var(--neon-green); }
-
-  .header-status {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-  }
-
-  .status-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--neon-green);
-    box-shadow: 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%,100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(1.3); }
-  }
-
-  .header-time {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    letter-spacing: 2px;
-  }
-
-  /* MAIN LAYOUT */
-  .layout {
-    position: relative;
-    z-index: 2;
-    padding-top: 60px;
-    height: 100vh;
-    display: grid;
-    grid-template-columns: 320px 1fr 300px;
-    grid-template-rows: 1fr;
-    gap: 0;
-  }
-
-  /* SIDEBAR LEFT */
-  .sidebar-left {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    border-right: 1px solid var(--dark-border);
-    overflow-y: auto;
-    background: rgba(2,10,18,0.6);
-    backdrop-filter: blur(10px);
-  }
-
-  /* SIDEBAR RIGHT */
-  .sidebar-right {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    border-left: 1px solid var(--dark-border);
-    overflow-y: auto;
-    background: rgba(2,10,18,0.6);
-    backdrop-filter: blur(10px);
-  }
-
-  /* GLASS CARD */
-  .glass-card {
-    background: var(--dark-card);
-    border: 1px solid var(--dark-border);
-    border-radius: 4px;
-    padding: 16px;
-    position: relative;
-    backdrop-filter: blur(16px);
-    overflow: hidden;
-    transition: border-color 0.3s, box-shadow 0.3s;
-  }
-
-  .glass-card:hover {
-    border-color: rgba(0,212,255,0.5);
-    box-shadow: 0 0 20px rgba(0,212,255,0.1), inset 0 0 20px rgba(0,212,255,0.03);
-  }
-
-  .glass-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--neon-blue), transparent);
-    opacity: 0.6;
-  }
-
-  .card-label {
-    font-size: 0.6rem;
-    letter-spacing: 3px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    margin-bottom: 8px;
-    font-family: 'Rajdhani', sans-serif;
-    font-weight: 600;
-  }
-
-  .card-value {
-    font-family: 'Orbitron', monospace;
-    font-size: 1.4rem;
-    color: var(--neon-blue);
-    text-shadow: 0 0 15px rgba(0,212,255,0.5);
-    letter-spacing: 2px;
-  }
-
-  .card-value.green {
-    color: var(--neon-green);
-    text-shadow: 0 0 15px rgba(0,255,136,0.5);
-  }
-
-  .card-value.yellow {
-    color: var(--neon-yellow);
-    text-shadow: 0 0 15px rgba(255,238,0,0.5);
-  }
-
-  .card-sub {
-    font-size: 0.7rem;
-    color: rgba(0,212,255,0.4);
-    margin-top: 4px;
-  }
-
-  /* SSID CARD */
-  .ssid-card {
-    background: linear-gradient(135deg, rgba(0,40,80,0.8), rgba(0,20,40,0.9));
-    border: 1px solid rgba(0,212,255,0.3);
-  }
-
-  .ssid-name {
-    font-family: 'Orbitron', monospace;
-    font-size: 1rem;
-    color: #fff;
-    text-shadow: 0 0 15px var(--neon-blue);
-    word-break: break-all;
-    margin-bottom: 4px;
-  }
-
-  /* SIGNAL BAR */
-  .signal-bars {
-    display: flex;
-    gap: 3px;
-    align-items: flex-end;
-    height: 30px;
-    margin-top: 8px;
-  }
-
-  .signal-bar {
-    width: 12px;
-    background: rgba(0,212,255,0.2);
-    border-radius: 2px;
-    border: 1px solid rgba(0,212,255,0.1);
-    transition: background 0.5s;
-  }
-
-  .signal-bar.active {
-    background: var(--neon-blue);
-    box-shadow: 0 0 6px var(--neon-blue);
-  }
-
-  .signal-bar:nth-child(1) { height: 6px; }
-  .signal-bar:nth-child(2) { height: 10px; }
-  .signal-bar:nth-child(3) { height: 16px; }
-  .signal-bar:nth-child(4) { height: 22px; }
-  .signal-bar:nth-child(5) { height: 30px; }
-
-  /* SPEED METER */
-  .speed-ring {
-    position: relative;
-    width: 100px; height: 100px;
-    margin: 8px auto;
-  }
-
-  .speed-ring canvas { display: block; }
-
-  .speed-center {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .speed-val {
-    font-family: 'Orbitron', monospace;
-    font-size: 1.1rem;
-    color: var(--neon-green);
-    text-shadow: 0 0 10px var(--neon-green);
-  }
-
-  .speed-unit {
-    font-size: 0.5rem;
-    color: var(--text-muted);
-    letter-spacing: 1px;
-  }
-
-  /* DEVICE LIST */
-  .device-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px;
-    border-radius: 3px;
-    border: 1px solid rgba(0,255,136,0.1);
-    margin-bottom: 6px;
-    background: rgba(0,255,136,0.03);
-    transition: all 0.3s;
-    animation: deviceFadeIn 0.5s ease;
-  }
-
-  @keyframes deviceFadeIn {
-    from { opacity: 0; transform: translateX(-10px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-
-  .device-item:hover {
-    border-color: rgba(0,255,136,0.3);
-    background: rgba(0,255,136,0.07);
-  }
-
-  .device-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: var(--neon-green);
-    box-shadow: 0 0 8px var(--neon-green);
-    flex-shrink: 0;
-    animation: pulse 2s ease-in-out infinite;
-  }
-
-  .device-name {
-    font-size: 0.7rem;
-    color: rgba(0,255,136,0.8);
-    flex: 1;
-  }
-
-  .device-signal {
-    font-size: 0.6rem;
-    color: rgba(0,212,255,0.5);
-  }
-
-  /* RADAR */
-  .radar-container {
-    position: relative;
-    width: 180px; height: 180px;
-    margin: 0 auto;
-  }
-
-  .radar-canvas { display: block; }
-
-  /* MAP AREA */
-  .map-area {
-    position: relative;
-    overflow: hidden;
-  }
-
-  #map {
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-  }
-
-  /* Map dark theme */
-  .leaflet-tile { filter: brightness(0.15) saturate(0.3) hue-rotate(180deg); }
-
-  /* MAP OVERLAY */
-  .map-overlay {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 10;
-  }
-
-  #signalCanvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-
-  /* HUD elements on map */
-  .map-hud {
-    position: absolute;
-    top: 16px; left: 50%;
-    transform: translateX(-50%);
-    z-index: 20;
-    display: flex;
-    gap: 12px;
-    pointer-events: none;
-  }
-
-  .hud-pill {
-    background: rgba(0,20,40,0.8);
-    border: 1px solid var(--dark-border);
-    border-radius: 20px;
-    padding: 4px 12px;
-    font-size: 0.65rem;
-    letter-spacing: 2px;
-    color: var(--neon-blue);
-    backdrop-filter: blur(10px);
-    animation: hudFloat 3s ease-in-out infinite;
-  }
-
-  @keyframes hudFloat {
-    0%,100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
-  }
-
-  .hud-pill.green { color: var(--neon-green); border-color: rgba(0,255,136,0.3); }
-  .hud-pill.yellow { color: var(--neon-yellow); border-color: rgba(255,238,0,0.3); }
-
-  /* CORNER BRACKETS on map */
-  .corner {
-    position: absolute;
-    width: 30px; height: 30px;
-    z-index: 15;
-    pointer-events: none;
-  }
-  .corner-tl { top: 8px; left: 8px; border-top: 2px solid var(--neon-blue); border-left: 2px solid var(--neon-blue); }
-  .corner-tr { top: 8px; right: 8px; border-top: 2px solid var(--neon-blue); border-right: 2px solid var(--neon-blue); }
-  .corner-bl { bottom: 8px; left: 8px; border-bottom: 2px solid var(--neon-blue); border-left: 2px solid var(--neon-blue); }
-  .corner-br { bottom: 8px; right: 8px; border-bottom: 2px solid var(--neon-blue); border-right: 2px solid var(--neon-blue); }
-
-  /* CENTER CROSSHAIR */
-  .crosshair {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%,-50%);
-    z-index: 15;
-    pointer-events: none;
-  }
-
-  .crosshair::before, .crosshair::after {
-    content: '';
-    position: absolute;
-    background: rgba(0,212,255,0.5);
-  }
-
-  .crosshair::before {
-    width: 20px; height: 1px;
-    left: -10px; top: 0;
-  }
-
-  .crosshair::after {
-    width: 1px; height: 20px;
-    top: -10px; left: 0;
-  }
-
-  .crosshair-ring {
-    width: 20px; height: 20px;
-    border: 1px solid rgba(0,212,255,0.5);
-    border-radius: 50%;
-    margin: -10px;
-    animation: spin 4s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* SCAN LINE on map */
-  .scan-line {
-    position: absolute;
-    left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--neon-blue), transparent);
-    box-shadow: 0 0 8px var(--neon-blue);
-    z-index: 12;
-    pointer-events: none;
-    animation: scanLine 4s linear infinite;
-  }
-
-  @keyframes scanLine {
-    0% { top: 0; opacity: 0; }
-    5% { opacity: 1; }
-    95% { opacity: 1; }
-    100% { top: 100%; opacity: 0; }
-  }
-
-  /* PING WAVEFORM */
-  .waveform {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    height: 40px;
-    margin-top: 8px;
-  }
-
-  .wave-bar {
-    width: 3px;
-    background: var(--neon-blue);
-    border-radius: 2px;
-    opacity: 0.7;
-    animation: waveAnim 1s ease-in-out infinite;
-  }
-
-  @keyframes waveAnim {
-    0%,100% { transform: scaleY(0.2); }
-    50% { transform: scaleY(1); }
-  }
-
-  /* PERMISSION POPUP */
-  .permission-popup {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    background: rgba(2,10,18,0.95);
-    backdrop-filter: blur(20px);
-    align-items: center;
-    justify-content: center;
-  }
-
-  .permission-popup.show { display: flex; }
-
-  .popup-box {
-    background: linear-gradient(135deg, rgba(0,30,60,0.95), rgba(0,10,30,0.98));
-    border: 1px solid rgba(0,212,255,0.4);
-    border-radius: 8px;
-    padding: 40px;
-    max-width: 480px;
-    width: 90%;
-    text-align: center;
-    position: relative;
-    animation: popupIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    box-shadow: 0 0 60px rgba(0,212,255,0.15), 0 0 120px rgba(0,212,255,0.05);
-  }
-
-  @keyframes popupIn {
-    from { opacity: 0; transform: scale(0.8) translateY(30px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
-  }
-
-  .popup-icon {
-    font-size: 3rem;
-    margin-bottom: 20px;
-    animation: iconPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes iconPulse {
-    0%,100% { text-shadow: 0 0 20px rgba(255,0,128,0.8); }
-    50% { text-shadow: 0 0 40px rgba(255,0,128,1), 0 0 80px rgba(255,0,128,0.4); }
-  }
-
-  .popup-title {
-    font-family: 'Orbitron', monospace;
-    font-size: 1.2rem;
-    color: var(--neon-pink);
-    margin-bottom: 12px;
-    letter-spacing: 3px;
-  }
-
-  .popup-text {
-    font-size: 0.8rem;
-    color: rgba(0,212,255,0.7);
-    line-height: 1.8;
-    margin-bottom: 24px;
-    font-family: 'Rajdhani', sans-serif;
-  }
-
-  .btn-demo {
-    background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(0,212,255,0.1));
-    border: 1px solid var(--neon-blue);
-    color: var(--neon-blue);
-    padding: 12px 32px;
-    font-family: 'Orbitron', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 3px;
-    cursor: pointer;
-    border-radius: 3px;
-    transition: all 0.3s;
-    text-transform: uppercase;
-  }
-
-  .btn-demo:hover {
-    background: linear-gradient(135deg, rgba(0,212,255,0.3), rgba(0,212,255,0.2));
-    box-shadow: 0 0 20px rgba(0,212,255,0.3);
-    transform: translateY(-2px);
-  }
-
-  /* BOOT SEQUENCE */
-  .boot-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 999;
-    background: var(--dark-bg);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    transition: opacity 0.8s ease;
-  }
-
-  .boot-screen.fade-out {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .boot-logo {
-    font-family: 'Orbitron', monospace;
-    font-size: 2.5rem;
-    font-weight: 900;
-    color: var(--neon-blue);
-    text-shadow: 0 0 40px var(--neon-blue), 0 0 80px rgba(0,212,255,0.3);
-    letter-spacing: 8px;
-    animation: glitch 3s ease-in-out infinite;
-  }
-
-  @keyframes glitch {
-    0%,95%,100% { clip-path: none; transform: none; }
-    96% { clip-path: inset(30% 0 50% 0); transform: translate(-4px, 0); color: var(--neon-pink); }
-    97% { clip-path: inset(60% 0 20% 0); transform: translate(4px, 0); color: var(--neon-green); }
-    98% { clip-path: none; transform: none; color: var(--neon-blue); }
-  }
-
-  .boot-progress {
-    width: 300px;
-    height: 2px;
-    background: rgba(0,212,255,0.1);
-    border: 1px solid rgba(0,212,255,0.2);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .boot-bar {
-    height: 100%;
-    background: linear-gradient(90deg, var(--neon-blue), var(--neon-green));
-    box-shadow: 0 0 10px var(--neon-blue);
-    width: 0%;
-    transition: width 0.1s linear;
-  }
-
-  .boot-text {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    letter-spacing: 2px;
-    min-height: 20px;
-  }
-
-  /* LATENCY GRAPH */
-  .latency-graph {
-    width: 100%;
-    height: 60px;
-    position: relative;
-    margin-top: 8px;
-  }
-
-  #latencyCanvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-
-  /* USER COUNT ANIM */
-  .user-counter {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-top: 8px;
-  }
-
-  .user-icon {
-    width: 24px; height: 24px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(0,255,136,0.6), rgba(0,255,136,0.1));
-    border: 1px solid var(--neon-green);
-    box-shadow: 0 0 8px rgba(0,255,136,0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.6rem;
-    animation: userPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes userPulse {
-    0%,100% { box-shadow: 0 0 8px rgba(0,255,136,0.4); }
-    50% { box-shadow: 0 0 16px rgba(0,255,136,0.8); }
-  }
-
-  /* PROGRESS BAR */
-  .prog-bar {
-    height: 3px;
-    background: rgba(0,212,255,0.1);
-    border-radius: 2px;
-    margin-top: 8px;
-    overflow: hidden;
-  }
-
-  .prog-fill {
-    height: 100%;
-    border-radius: 2px;
-    background: linear-gradient(90deg, var(--neon-blue), var(--neon-green));
-    box-shadow: 0 0 6px var(--neon-blue);
-    transition: width 1s ease;
-  }
-
-  /* MOBILE */
-  @media (max-width: 900px) {
-    .layout {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto 50vh auto;
-    }
-    .sidebar-left, .sidebar-right {
-      border: none;
-      border-bottom: 1px solid var(--dark-border);
-      flex-direction: row;
-      flex-wrap: wrap;
-      overflow-x: auto;
-    }
-    .sidebar-left .glass-card,
-    .sidebar-right .glass-card {
-      min-width: 150px;
-      flex: 1;
-    }
-  }
-
-  /* SCROLLBAR */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: rgba(0,20,40,0.3); }
-  ::-webkit-scrollbar-thumb { background: var(--neon-blue); border-radius: 2px; }
-
-  /* FREQUENCY BARS */
-  .freq-bars {
-    display: flex;
-    gap: 2px;
-    height: 50px;
-    align-items: flex-end;
-    margin-top: 8px;
-  }
-
-  .freq-bar {
-    flex: 1;
-    background: linear-gradient(to top, var(--neon-blue), transparent);
-    border-radius: 2px 2px 0 0;
-    opacity: 0.7;
-    transition: height 0.3s ease;
-    min-height: 2px;
-  }
-
-  /* TOOLTIP */
-  .tooltip {
-    position: absolute;
-    background: rgba(0,20,40,0.95);
-    border: 1px solid var(--dark-border);
-    border-radius: 4px;
-    padding: 8px 12px;
-    font-size: 0.7rem;
-    color: var(--neon-blue);
-    pointer-events: none;
-    z-index: 1000;
-    display: none;
-    backdrop-filter: blur(10px);
-    white-space: nowrap;
-  }
-
-  /* MODE BADGE */
-  .mode-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(255,238,0,0.1);
-    border: 1px solid rgba(255,238,0,0.4);
-    border-radius: 3px;
-    padding: 3px 10px;
-    font-size: 0.6rem;
-    letter-spacing: 2px;
-    color: var(--neon-yellow);
-    margin-bottom: 8px;
-  }
-
-  .mode-badge-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--neon-yellow);
-    box-shadow: 0 0 6px var(--neon-yellow);
-    animation: pulse 1s ease-in-out infinite;
-  }
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --nb:#00d4ff;--ng:#00ff88;--np:#ff0080;--ny:#ffee00;
+  --bg:#020a12;--card:rgba(0,18,36,0.82);--border:rgba(0,212,255,0.18);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:#e0f4ff;font-family:'Share Tech Mono',monospace;cursor:crosshair}
+
+/* grid bg */
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,212,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.04) 1px,transparent 1px);
+  background-size:44px 44px;animation:gs 18s linear infinite}
+@keyframes gs{to{background-position:44px 44px}}
+
+/* scanlines */
+body::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px)}
+
+/* HEADER */
+#hdr{position:fixed;top:0;left:0;right:0;height:54px;z-index:200;
+  display:flex;align-items:center;justify-content:space-between;padding:0 20px;
+  background:rgba(2,10,18,0.92);border-bottom:1px solid var(--border);backdrop-filter:blur(16px)}
+.logo{font-family:'Orbitron',monospace;font-weight:900;font-size:1.2rem;letter-spacing:5px;
+  color:var(--nb);text-shadow:0 0 18px var(--nb),0 0 40px rgba(0,212,255,0.3)}
+.logo span{color:var(--ng);text-shadow:0 0 18px var(--ng)}
+.hdr-r{display:flex;align-items:center;gap:16px}
+.hdr-time{font-size:0.72rem;color:rgba(0,212,255,0.55);letter-spacing:2px}
+.sdot{width:8px;height:8px;border-radius:50%;background:var(--ng);box-shadow:0 0 10px var(--ng);animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+
+/* LAYOUT */
+#app{position:fixed;top:54px;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:row}
+#sl{width:290px;min-width:220px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;padding:12px;
+  overflow-y:auto;background:rgba(2,8,18,0.7);border-right:1px solid var(--border)}
+#mc{flex:1;position:relative;overflow:hidden}
+#sr{width:270px;min-width:200px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;padding:12px;
+  overflow-y:auto;background:rgba(2,8,18,0.7);border-left:1px solid var(--border)}
+
+/* CARD */
+.card{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:13px;position:relative;
+  backdrop-filter:blur(14px);overflow:hidden;transition:border-color .3s,box-shadow .3s;flex-shrink:0}
+.card:hover{border-color:rgba(0,212,255,.4);box-shadow:0 0 18px rgba(0,212,255,.08),inset 0 0 18px rgba(0,212,255,.03)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,212,255,.6),transparent)}
+.lbl{font-size:.58rem;letter-spacing:3px;color:rgba(0,212,255,.45);text-transform:uppercase;
+  font-family:'Rajdhani',sans-serif;font-weight:600;margin-bottom:6px}
+.val{font-family:'Orbitron',monospace;font-size:1.3rem;color:var(--nb);
+  text-shadow:0 0 14px rgba(0,212,255,.5);letter-spacing:2px}
+.val.g{color:var(--ng);text-shadow:0 0 14px rgba(0,255,136,.5)}
+.val.y{color:var(--ny);text-shadow:0 0 14px rgba(255,238,0,.5)}
+.sub{font-size:.65rem;color:rgba(0,212,255,.35);margin-top:3px}
+
+/* SSID */
+.ssid-name{font-family:'Orbitron',monospace;font-size:.95rem;color:#fff;
+  text-shadow:0 0 14px var(--nb);word-break:break-all;margin-bottom:4px}
+
+/* SIGNAL BARS */
+.sbars{display:flex;gap:3px;align-items:flex-end;height:28px;margin-top:8px}
+.sbar{width:10px;border-radius:2px;background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.08);transition:background .5s}
+.sbar.on{background:var(--nb);box-shadow:0 0 6px var(--nb)}
+.sbar:nth-child(1){height:5px}.sbar:nth-child(2){height:9px}
+.sbar:nth-child(3){height:14px}.sbar:nth-child(4){height:20px}.sbar:nth-child(5){height:28px}
+
+/* PROG BAR */
+.pbar{height:3px;background:rgba(0,212,255,.1);border-radius:2px;margin-top:7px;overflow:hidden}
+.pfill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--nb),var(--ng));
+  box-shadow:0 0 6px var(--nb);transition:width 1s ease}
+
+/* SPEED ROW */
+.srow{display:flex;gap:16px;align-items:flex-start;margin-top:4px}
+.scol .mini{font-size:.55rem;color:rgba(0,212,255,.4);letter-spacing:1px;margin-bottom:2px}
+
+/* WAVEFORM */
+.wf{display:flex;gap:2px;align-items:center;height:38px;margin-top:8px}
+.wfb{width:3px;border-radius:2px;background:var(--nb);opacity:.65;animation:wa 1s ease-in-out infinite}
+@keyframes wa{0%,100%{transform:scaleY(.15)}50%{transform:scaleY(1)}}
+
+/* FREQ BARS */
+.fbars{display:flex;gap:2px;height:44px;align-items:flex-end;margin-top:8px}
+.fbar{flex:1;background:linear-gradient(to top,var(--nb),transparent);border-radius:2px 2px 0 0;min-height:2px;transition:height .3s ease}
+
+/* MAP */
+#map{position:absolute;inset:0;width:100%;height:100%}
+.leaflet-tile{filter:brightness(.13) saturate(.2) hue-rotate(195deg) !important}
+.leaflet-tile-container{filter:none !important}
+
+/* SIGNAL CANVAS */
+#sc{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10}
+
+/* HUD */
+.hud{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:20;
+  display:flex;gap:10px;pointer-events:none;flex-wrap:wrap;justify-content:center}
+.hudp{background:rgba(2,14,28,.82);border:1px solid var(--border);border-radius:20px;
+  padding:4px 12px;font-size:.62rem;letter-spacing:2px;color:var(--nb);backdrop-filter:blur(10px)}
+.hudp.g{color:var(--ng);border-color:rgba(0,255,136,.25)}
+.hudp.y{color:var(--ny);border-color:rgba(255,238,0,.25)}
+
+/* CORNERS */
+.co{position:absolute;width:28px;height:28px;z-index:15;pointer-events:none}
+.co.tl{top:8px;left:8px;border-top:2px solid var(--nb);border-left:2px solid var(--nb)}
+.co.tr{top:8px;right:8px;border-top:2px solid var(--nb);border-right:2px solid var(--nb)}
+.co.bl{bottom:8px;left:8px;border-bottom:2px solid var(--nb);border-left:2px solid var(--nb)}
+.co.br{bottom:8px;right:8px;border-bottom:2px solid var(--nb);border-right:2px solid var(--nb)}
+
+/* SCAN LINE */
+.sl{position:absolute;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--nb),transparent);
+  box-shadow:0 0 8px var(--nb);z-index:12;pointer-events:none;animation:sla 5s linear infinite}
+@keyframes sla{0%{top:0;opacity:0}3%{opacity:1}97%{opacity:1}100%{top:100%;opacity:0}}
+
+/* CROSSHAIR */
+.cx{position:absolute;top:50%;left:50%;pointer-events:none;z-index:15}
+.cx::before,.cx::after{content:'';position:absolute;background:rgba(0,212,255,.45)}
+.cx::before{width:22px;height:1px;left:-11px;top:0}
+.cx::after{width:1px;height:22px;top:-11px;left:0}
+.cxr{width:18px;height:18px;border:1px solid rgba(0,212,255,.4);border-radius:50%;
+  margin:-9px;animation:spin 4s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* RADAR */
+.rcon{position:relative;width:170px;height:170px;margin:4px auto 0}
+
+/* DEVICES */
+.di{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:3px;
+  border:1px solid rgba(0,255,136,.1);margin-bottom:5px;background:rgba(0,255,136,.03);
+  transition:all .3s;animation:dfi .4s ease}
+@keyframes dfi{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+.di:hover{border-color:rgba(0,255,136,.3);background:rgba(0,255,136,.07)}
+.dd{width:9px;height:9px;border-radius:50%;background:var(--ng);box-shadow:0 0 7px var(--ng);
+  flex-shrink:0;animation:blink 2s ease-in-out infinite}
+.dn{font-size:.68rem;color:rgba(0,255,136,.8);flex:1}
+.ds{font-size:.58rem;color:rgba(0,212,255,.45)}
+
+/* USER ICONS */
+.uis{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ui{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle,rgba(0,255,136,.5),rgba(0,255,136,.08));
+  border:1px solid var(--ng);box-shadow:0 0 7px rgba(0,255,136,.35);
+  display:flex;align-items:center;justify-content:center;font-size:.55rem;
+  animation:blink 2s ease-in-out infinite}
+
+/* MODE BADGE */
+.mbadge{display:inline-flex;align-items:center;gap:6px;background:rgba(255,238,0,.08);
+  border:1px solid rgba(255,238,0,.35);border-radius:3px;padding:3px 9px;
+  font-size:.58rem;letter-spacing:2px;color:var(--ny);margin-bottom:4px}
+.mbd{width:5px;height:5px;border-radius:50%;background:var(--ny);box-shadow:0 0 6px var(--ny);animation:blink 1s ease-in-out infinite}
+
+/* PERMISSION POPUP */
+#pp{display:none;position:fixed;inset:0;z-index:500;background:rgba(2,10,18,.96);
+  backdrop-filter:blur(20px);align-items:center;justify-content:center}
+#pp.show{display:flex}
+.pbox{background:linear-gradient(135deg,rgba(0,28,56,.96),rgba(0,10,26,.98));
+  border:1px solid rgba(0,212,255,.35);border-radius:8px;padding:36px;max-width:460px;
+  width:92%;text-align:center;box-shadow:0 0 60px rgba(0,212,255,.12);
+  animation:pi .5s cubic-bezier(.175,.885,.32,1.275)}
+@keyframes pi{from{opacity:0;transform:scale(.8) translateY(28px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.pico{font-size:2.8rem;margin-bottom:18px;animation:blink 2s ease-in-out infinite}
+.ptit{font-family:'Orbitron',monospace;font-size:1.1rem;color:var(--np);margin-bottom:10px;letter-spacing:3px}
+.ptxt{font-size:.78rem;color:rgba(0,212,255,.65);line-height:1.9;margin-bottom:22px;font-family:'Rajdhani',sans-serif}
+.btn{background:rgba(0,212,255,.12);border:1px solid var(--nb);color:var(--nb);
+  padding:11px 28px;font-family:'Orbitron',monospace;font-size:.7rem;letter-spacing:3px;
+  cursor:pointer;border-radius:3px;transition:all .3s}
+.btn:hover{background:rgba(0,212,255,.24);box-shadow:0 0 20px rgba(0,212,255,.28);transform:translateY(-2px)}
+
+/* BOOT */
+#boot{position:fixed;inset:0;z-index:999;background:var(--bg);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;transition:opacity .7s}
+#boot.out{opacity:0;pointer-events:none}
+.bloc{font-family:'Orbitron',monospace;font-weight:900;font-size:2.2rem;color:var(--nb);
+  text-shadow:0 0 40px var(--nb),0 0 80px rgba(0,212,255,.3);letter-spacing:8px;
+  animation:glitch 3s ease-in-out infinite}
+@keyframes glitch{
+  0%,94%,100%{clip-path:none;transform:none;color:var(--nb)}
+  95%{clip-path:inset(25% 0 55% 0);transform:translate(-4px,0);color:var(--np)}
+  97%{clip-path:inset(65% 0 15% 0);transform:translate(4px,0);color:var(--ng)}
+  99%{clip-path:none;transform:none}
+}
+.bprog{width:280px;height:2px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.18);border-radius:2px;overflow:hidden}
+.bbar{height:100%;background:linear-gradient(90deg,var(--nb),var(--ng));box-shadow:0 0 8px var(--nb);width:0;transition:width .12s linear}
+.btxt{font-size:.65rem;color:rgba(0,212,255,.5);letter-spacing:2px;min-height:18px}
+
+/* LATENCY */
+#lc{width:100%;height:52px;display:block;margin-top:6px}
+/* BW */
+#bwc{width:100%;height:72px;display:block}
+
+/* RESPONSIVE */
+@media(max-width:860px){
+  #app{flex-direction:column}
+  #sl,#sr{width:100%;min-width:0;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;
+    overflow-y:hidden;max-height:140px;border:none;border-bottom:1px solid var(--border)}
+  #sl .card,#sr .card{min-width:160px;flex-shrink:0}
+  #mc{flex:1;min-height:0}
+}
+@media(max-width:600px){
+  #hdr{padding:0 12px}
+  .logo{font-size:.9rem;letter-spacing:3px}
+}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:rgba(0,20,40,.2)}
+::-webkit-scrollbar-thumb{background:var(--nb);border-radius:2px}
 </style>
 </head>
 <body>
 
-<!-- BOOT SCREEN -->
-<div class="boot-screen" id="bootScreen">
-  <div class="boot-logo">NETPULSE</div>
-  <div style="font-family:'Rajdhani',sans-serif;font-size:0.8rem;color:var(--text-muted);letter-spacing:4px;">WiFi COVERAGE MATRIX v3.7</div>
-  <div class="boot-progress"><div class="boot-bar" id="bootBar"></div></div>
-  <div class="boot-text" id="bootText">INITIALIZING NEURAL NETWORK...</div>
+<!-- BOOT -->
+<div id="boot">
+  <div class="bloc">NETPULSE</div>
+  <div style="font-family:'Rajdhani',sans-serif;font-size:.75rem;color:rgba(0,212,255,.4);letter-spacing:4px">WiFi QOPLAMA MATRISI v4.1</div>
+  <div class="bprog"><div class="bbar" id="bbar"></div></div>
+  <div class="btxt" id="btxt">ISHGA TUSHIRILMOQDA...</div>
 </div>
 
-<!-- SCANLINES -->
-<div class="scanlines"></div>
-
 <!-- HEADER -->
-<header>
+<div id="hdr">
   <div class="logo">NET<span>PULSE</span></div>
-  <div class="header-status">
-    <span class="header-time" id="headerTime">--:--:--</span>
-    <span style="font-size:0.6rem;color:var(--text-muted);letter-spacing:2px;" id="headerDate">----</span>
-    <div class="status-dot"></div>
+  <div class="hdr-r">
+    <span class="hdr-time" id="ht">--:--:--</span>
+    <span style="font-size:.6rem;color:rgba(0,212,255,.4);letter-spacing:2px" id="hd">---</span>
+    <div class="sdot"></div>
   </div>
-</header>
+</div>
 
-<!-- MAIN LAYOUT -->
-<div class="layout">
+<!-- APP -->
+<div id="app">
 
-  <!-- LEFT SIDEBAR -->
-  <div class="sidebar-left">
+  <!-- LEFT -->
+  <div id="sl">
+    <div id="mbadge" class="mbadge" style="display:none"><div class="mbd"></div>SIMULYATSIYA REJIMI</div>
 
-    <!-- Mode badge -->
-    <div id="modeBadge" class="mode-badge" style="display:none;">
-      <div class="mode-badge-dot"></div>
-      SIMULATION MODE
-    </div>
-
-    <!-- SSID Card -->
-    <div class="glass-card ssid-card">
-      <div class="card-label">▸ CONNECTED NETWORK</div>
-      <div class="ssid-name" id="ssidName">SCANNING...</div>
-      <div class="card-sub" id="ssidSub">BSSID: --:--:--:--:--:--</div>
-      <div class="signal-bars" id="signalBars">
-        <div class="signal-bar" data-idx="1"></div>
-        <div class="signal-bar" data-idx="2"></div>
-        <div class="signal-bar" data-idx="3"></div>
-        <div class="signal-bar" data-idx="4"></div>
-        <div class="signal-bar" data-idx="5"></div>
+    <div class="card">
+      <div class="lbl">▸ ULANGAN TARMOQ</div>
+      <div class="ssid-name" id="ssid">QIDIRILMOQDA...</div>
+      <div class="sub" id="bssid">BSSID: --:--:--:--:--:--</div>
+      <div class="sbars">
+        <div class="sbar" id="sb1"></div><div class="sbar" id="sb2"></div>
+        <div class="sbar" id="sb3"></div><div class="sbar" id="sb4"></div><div class="sbar" id="sb5"></div>
       </div>
     </div>
 
-    <!-- Signal Strength -->
-    <div class="glass-card">
-      <div class="card-label">▸ SIGNAL STRENGTH</div>
-      <div class="card-value" id="signalVal">-72 dBm</div>
-      <div class="card-sub" id="signalQuality">GOOD</div>
-      <div class="prog-bar"><div class="prog-fill" id="signalProg" style="width:65%"></div></div>
+    <div class="card">
+      <div class="lbl">▸ SIGNAL KUCHI</div>
+      <div class="val" id="sigv">--- dBm</div>
+      <div class="sub" id="sigq">---</div>
+      <div class="pbar"><div class="pfill" id="sigp" style="width:0%"></div></div>
     </div>
 
-    <!-- Speed -->
-    <div class="glass-card">
-      <div class="card-label">▸ NETWORK THROUGHPUT</div>
-      <div style="display:flex;gap:16px;align-items:center;">
-        <div>
-          <div style="font-size:0.55rem;color:var(--text-muted);letter-spacing:1px;margin-bottom:2px;">↓ DOWN</div>
-          <div class="card-value green" id="dlSpeed">87.4</div>
-          <div class="card-sub">Mbps</div>
-        </div>
-        <div>
-          <div style="font-size:0.55rem;color:var(--text-muted);letter-spacing:1px;margin-bottom:2px;">↑ UP</div>
-          <div class="card-value" id="ulSpeed">22.1</div>
-          <div class="card-sub">Mbps</div>
-        </div>
+    <div class="card">
+      <div class="lbl">▸ TARMOQ TEZLIGI</div>
+      <div class="srow">
+        <div class="scol"><div class="mini">↓ YUKLAB</div><div class="val g" id="dl">--.-</div><div class="sub">Mbps</div></div>
+        <div class="scol"><div class="mini">↑ YUKLASH</div><div class="val" id="ul">--.-</div><div class="sub">Mbps</div></div>
       </div>
     </div>
 
-    <!-- Ping / Latency -->
-    <div class="glass-card">
-      <div class="card-label">▸ LATENCY TRACE</div>
-      <div class="card-value yellow" id="pingVal">12 ms</div>
-      <div class="latency-graph"><canvas id="latencyCanvas"></canvas></div>
+    <div class="card">
+      <div class="lbl">▸ KECHIKISH GRAFIGI</div>
+      <div class="val y" id="ping">-- ms</div>
+      <canvas id="lc"></canvas>
     </div>
 
-    <!-- Frequency -->
-    <div class="glass-card">
-      <div class="card-label">▸ SPECTRUM ANALYSIS</div>
-      <div class="card-value" style="font-size:1rem;" id="freqVal">5 GHz / CH 36</div>
-      <div class="freq-bars" id="freqBars">
-        <!-- generated by JS -->
-      </div>
+    <div class="card">
+      <div class="lbl">▸ SPEKTR TAHLILI</div>
+      <div class="val" style="font-size:.9rem" id="freq">-- GHz</div>
+      <div class="fbars" id="fbars"></div>
     </div>
-
   </div>
 
   <!-- MAP CENTER -->
-  <div class="map-area">
+  <div id="mc">
     <div id="map"></div>
-
-    <!-- Signal canvas overlay -->
-    <canvas id="signalCanvas"></canvas>
-
-    <!-- HUD pills -->
-    <div class="map-hud">
-      <div class="hud-pill" id="coordPill">LAT -- / LNG --</div>
-      <div class="hud-pill green" id="devicePill">-- DEVICES</div>
-      <div class="hud-pill yellow" id="coveragePill">-- COVERAGE</div>
+    <canvas id="sc"></canvas>
+    <div class="hud">
+      <div class="hudp" id="cp">KEN -- / UZU --</div>
+      <div class="hudp g" id="dp">-- QURILMA</div>
+      <div class="hudp y" id="cvp">-- QOPLAMA</div>
     </div>
-
-    <!-- Corners -->
-    <div class="corner corner-tl"></div>
-    <div class="corner corner-tr"></div>
-    <div class="corner corner-bl"></div>
-    <div class="corner corner-br"></div>
-
-    <!-- Scan line -->
-    <div class="scan-line"></div>
-
-    <!-- Crosshair at center -->
-    <div class="crosshair"><div class="crosshair-ring"></div></div>
+    <div class="co tl"></div><div class="co tr"></div><div class="co bl"></div><div class="co br"></div>
+    <div class="sl"></div>
+    <div class="cx"><div class="cxr"></div></div>
   </div>
 
-  <!-- RIGHT SIDEBAR -->
-  <div class="sidebar-right">
-
-    <!-- Radar -->
-    <div class="glass-card" style="text-align:center;">
-      <div class="card-label">▸ PROXIMITY RADAR</div>
-      <div class="radar-container">
-        <canvas id="radarCanvas" width="180" height="180" class="radar-canvas"></canvas>
-      </div>
+  <!-- RIGHT -->
+  <div id="sr">
+    <div class="card" style="text-align:center">
+      <div class="lbl">▸ YAQINLIK RADARI</div>
+      <div class="rcon"><canvas id="rc" width="170" height="170"></canvas></div>
     </div>
 
-    <!-- Connected Users -->
-    <div class="glass-card">
-      <div class="card-label">▸ CONNECTED DEVICES</div>
-      <div class="card-value green" id="userCount">0</div>
-      <div class="card-sub">active nodes</div>
-      <div class="user-counter" id="userIcons"></div>
+    <div class="card">
+      <div class="lbl">▸ ULANGAN QURILMALAR</div>
+      <div class="val g" id="ucnt">0</div>
+      <div class="sub">faol tugunlar</div>
+      <div class="uis" id="uicons"></div>
     </div>
 
-    <!-- Device list -->
-    <div class="glass-card" style="flex:1;min-height:0;overflow-y:auto;">
-      <div class="card-label">▸ DEVICE MANIFEST</div>
-      <div id="deviceList"></div>
+    <div class="card" style="flex:1;overflow-y:auto;max-height:220px">
+      <div class="lbl">▸ QURILMALAR RO'YXATI</div>
+      <div id="dlist"></div>
     </div>
 
-    <!-- Upload/Download graph -->
-    <div class="glass-card">
-      <div class="card-label">▸ BANDWIDTH MONITOR</div>
-      <canvas id="bandwidthCanvas" width="260" height="80"></canvas>
+    <div class="card">
+      <div class="lbl">▸ TARMOQ YUKLAMASI</div>
+      <canvas id="bwc"></canvas>
     </div>
-
   </div>
 </div>
 
 <!-- PERMISSION POPUP -->
-<div class="permission-popup" id="permPopup">
-  <div class="popup-box">
-    <div class="popup-icon">⚠</div>
-    <div class="popup-title">ACCESS DENIED</div>
-    <div class="popup-text">
-      LOCATION PERMISSIONS REQUIRED FOR LIVE MAPPING.<br><br>
-      Browser security protocols prevent direct WiFi hardware access.<br>
-      ACTIVATING NEURAL SIMULATION MODE — generating synthetic network topology from probabilistic models.
+<div id="pp">
+  <div class="pbox">
+    <div class="pico">⚠</div>
+    <div class="ptit">RUXSAT BERILMADI</div>
+    <div class="ptxt">
+      Joylashuv ruxsati rad etildi yoki mavjud emas.<br><br>
+      Brauzer xavfsizligi WiFi qurilmasiga to'g'ridan-to'g'ri kirishni cheklaydi.<br>
+      <b style="color:var(--nb)">NEYRON SIMULYATSIYA REJIMI YOQILMOQDA</b> —
+      ehtimollik modellari asosida sun'iy tarmoq topologiyasi yaratilmoqda.
     </div>
-    <button class="btn-demo" onclick="startDemo()">ENGAGE SIMULATION MODE</button>
+    <button class="btn" onclick="startDemo()">⚡ SIMULYATSIYANI BOSHLASH</button>
   </div>
 </div>
 
-<!-- TOOLTIP -->
-<div class="tooltip" id="tooltip"></div>
-
 <script>
-// ==================== BOOT SEQUENCE ====================
-const bootMessages = [
-  'INITIALIZING NEURAL NETWORK...',
-  'CALIBRATING RF SENSORS...',
-  'ESTABLISHING SECURE TUNNEL...',
-  'LOADING GEOSPATIAL DATABASE...',
-  'SCANNING ELECTROMAGNETIC SPECTRUM...',
-  'SYNCING DEVICE REGISTRY...',
-  'ACTIVATING SIGNAL MATRIX...',
-  'SYSTEM READY.'
+// ========== BOOT ==========
+const BOOT_MSGS = [
+  'NEYRON YADRO ISHGA TUSHIRILMOQDA...',
+  'RF SENSORLAR SOZLANMOQDA...',
+  'XAVFSIZ TUNNEL O\'RNATILMOQDA...',
+  'GEOFAZOVIY MA\'LUMOTLAR YUKLANMOQDA...',
+  'ELEKTROMAGNIT SPEKTR SKANLANMOQDA...',
+  'QURILMALAR RO\'YXATI SINXRONLANMOQDA...',
+  'SIGNAL MATRISI FAOLLASHTIRILMOQDA...',
+  'BARCHA TIZIMLAR TAYYOR ✓'
 ];
-
-let bootProgress = 0;
-const bootBar = document.getElementById('bootBar');
-const bootText = document.getElementById('bootText');
+let bi = 0;
+const bbar = document.getElementById('bbar');
+const btxt = document.getElementById('btxt');
+const bootEl = document.getElementById('boot');
 
 function runBoot() {
-  let i = 0;
-  const interval = setInterval(() => {
-    if (i < bootMessages.length) {
-      bootText.textContent = bootMessages[i];
-      bootProgress = (i + 1) / bootMessages.length * 100;
-      bootBar.style.width = bootProgress + '%';
-      i++;
-    } else {
-      clearInterval(interval);
-      setTimeout(() => {
-        document.getElementById('bootScreen').classList.add('fade-out');
-        setTimeout(() => {
-          document.getElementById('bootScreen').remove();
-          init();
-        }, 800);
-      }, 300);
-    }
-  }, 280);
+  if (bi >= BOOT_MSGS.length) {
+    bootEl.classList.add('out');
+    setTimeout(() => { bootEl.style.display = 'none'; init(); }, 700);
+    return;
+  }
+  btxt.textContent = BOOT_MSGS[bi];
+  bbar.style.width = ((bi + 1) / BOOT_MSGS.length * 100) + '%';
+  bi++;
+  setTimeout(runBoot, 260);
 }
+setTimeout(runBoot, 200);
 
-runBoot();
-
-// ==================== STATE ====================
-let simMode = false;
-let userLat = 40.7128, userLng = -74.0060;
-let map, signalCanvas, signalCtx;
-let devices = [];
-let signalStrength = -72;
-let pingHistory = [];
-let bwHistory = { dl: [], ul: [] };
-let freqData = [];
-let radarAngle = 0;
-let radarDots = [];
-let animFrames = {};
-let deviceMarkers = [];
-
-// ==================== CLOCK ====================
-function updateClock() {
-  const now = new Date();
-  document.getElementById('headerTime').textContent =
-    now.toTimeString().slice(0,8);
-  document.getElementById('headerDate').textContent =
-    now.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'}).toUpperCase();
+// ========== CLOCK ==========
+function clock() {
+  const n = new Date();
+  document.getElementById('ht').textContent = n.toTimeString().slice(0,8);
+  const days = ['Yak','Dush','Sesh','Chor','Pay','Jum','Shan'];
+  const months = ['Yan','Fev','Mar','Apr','May','Iyn','Iyl','Avg','Sen','Okt','Noy','Dek'];
+  document.getElementById('hd').textContent =
+    days[n.getDay()] + ' ' + n.getDate() + ' ' + months[n.getMonth()];
 }
-setInterval(updateClock, 1000);
-updateClock();
+setInterval(clock, 1000); clock();
 
-// ==================== FAKE DATA GENERATORS ====================
-const deviceNames = [
-  'iPhone-X7','DESKTOP-3F2A','MacBook-Pro','Galaxy-S22',
-  'Laptop-Dell','iPad-Mini','Smart-TV','Echo-Dot',
-  'NestCam-01','Pixel-7','Surface-Pro','XBOX-Series',
-  'Chromecast','HP-Printer','Ring-Doorbell','Kindle-Fire'
-];
+// ========== STATE ==========
+let LAT = 40.7128, LNG = -74.0060;
+let SIG = -70, PING_VAL = 15;
+let map, sc, sctx, devices = [];
+let pingHist = [], dlHist = [], ulHist = [];
+let radarAngle = 0, radarBlips = [];
+let waves = [], wt = 0;
+let freqVals = [];
 
-function generateDevices(count) {
-  return Array.from({length: count}, (_, i) => ({
-    id: i,
-    name: deviceNames[i % deviceNames.length],
-    signal: -40 - Math.floor(Math.random() * 50),
-    type: ['📱','💻','🖥️','📺','🎮'][Math.floor(Math.random()*5)],
-    lat: userLat + (Math.random()-0.5)*0.01,
-    lng: userLng + (Math.random()-0.5)*0.01,
-    active: true
-  }));
-}
+const DN = ['iPhone-X7','Kompyuter-3F2A','MacBook-Pro','Galaxy-S22','Noutbuk-Dell',
+            'iPad-Mini','AqliTV-4K','UlantiChi','UyKamera-01','Pixel-7',
+            'Surface-Pro','XBOX-SX','Chromecast','HP-Printer','Qo\'ng\'iroq-Pro','Kindle-11'];
+const DT = ['📱','💻','🖥️','📺','🎮'];
 
-function randBetween(a, b) { return a + Math.random() * (b - a); }
+// ========== HELPERS ==========
+function rnd(a,b){return a+Math.random()*(b-a)}
+function rndInt(a,b){return Math.floor(rnd(a,b))}
+function hex2(){return Math.floor(Math.random()*256).toString(16).padStart(2,'0').toUpperCase()}
 
-function startDemo() {
-  document.getElementById('permPopup').classList.remove('show');
-  simMode = true;
-  document.getElementById('modeBadge').style.display = 'flex';
-  initSystem(userLat, userLng);
-}
-
-// ==================== INIT ====================
+// ========== INIT ==========
 function init() {
-  // Try geolocation
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
-      pos => {
-        userLat = pos.coords.latitude;
-        userLng = pos.coords.longitude;
-        simMode = true;
-        document.getElementById('modeBadge').style.display = 'flex';
-        initSystem(userLat, userLng);
-      },
-      () => {
-        document.getElementById('permPopup').classList.add('show');
-      },
+      p => { LAT = p.coords.latitude; LNG = p.coords.longitude; launch(true); },
+      () => { document.getElementById('pp').classList.add('show'); },
       {timeout: 5000}
     );
   } else {
-    document.getElementById('permPopup').classList.add('show');
+    document.getElementById('pp').classList.add('show');
   }
 }
 
-function initSystem(lat, lng) {
-  userLat = lat;
-  userLng = lng;
+function startDemo() {
+  document.getElementById('pp').classList.remove('show');
+  launch(true);
+}
 
-  // Setup WiFi info
-  setupWifiInfo();
+function launch(sim) {
+  if (sim) document.getElementById('mbadge').style.display = 'inline-flex';
 
-  // Init devices
-  devices = generateDevices(Math.floor(randBetween(6, 14)));
-  renderDeviceList();
-  updateUserCount();
+  setupWifi();
+  devices = mkDevices(rndInt(7,13));
+  renderDevices();
+  updateUserUI();
 
-  // Init map
-  initMap(lat, lng);
-
-  // Init canvases
-  initSignalCanvas();
+  initMap();
+  initCanvas();
   initRadar();
-  initLatencyCanvas();
-  initBandwidthCanvas();
-  initFreqBars();
+  initLatency();
+  initBW();
+  initFreq();
+  mainLoop();
 
-  // Start animations
-  animateAll();
+  document.getElementById('cp').textContent = `KEN ${LAT.toFixed(4)} / UZU ${LNG.toFixed(4)}`;
+  document.getElementById('dp').textContent = `${devices.length} QURILMA`;
+  document.getElementById('cvp').textContent = `${rndInt(74,97)}% QOPLAMA`;
 
-  // Update HUD
-  document.getElementById('coordPill').textContent =
-    `LAT ${lat.toFixed(4)} / LNG ${lng.toFixed(4)}`;
-  document.getElementById('devicePill').textContent =
-    `${devices.length} DEVICES`;
-  document.getElementById('coveragePill').textContent =
-    `${Math.floor(randBetween(72,98))}% COVERAGE`;
-
-  // Live data simulation
-  setInterval(liveUpdate, 2000);
-  setInterval(updateFreqBars, 800);
+  setInterval(liveUpdate, 1800);
+  setInterval(updateFreq, 750);
 }
 
-// ==================== WIFI INFO ====================
-function setupWifiInfo() {
-  const ssids = ['DARKNET-5G','CORP_SECURE','HomeNet-Pro','Quantum-Mesh','CyberGrid-X'];
-  const ssid = ssids[Math.floor(Math.random()*ssids.length)];
-  const bssid = Array.from({length:6}, () =>
-    Math.floor(Math.random()*256).toString(16).padStart(2,'0').toUpperCase()
-  ).join(':');
+// ========== WIFI SETUP ==========
+function setupWifi() {
+  const ssids = ['QORONG\'I-TAR-5G','KORP_XAVFSIZ','UY-TARMOG\'I-Pro','KVANT-TO\'R','KIBER-GRID-X','NEYRO-ULANISH','SOYA_TARMOG\'I'];
+  document.getElementById('ssid').textContent = ssids[rndInt(0,ssids.length)];
+  document.getElementById('bssid').textContent = `BSSID: ${[1,2,3,4,5,6].map(()=>hex2()).join(':')}`;
 
-  document.getElementById('ssidName').textContent = ssid;
-  document.getElementById('ssidSub').textContent = `BSSID: ${bssid}`;
+  SIG = rndInt(-85,-45);
+  updateSigUI();
 
-  signalStrength = Math.floor(randBetween(-85, -45));
-  updateSignalBars();
-  updateSignalCard();
+  document.getElementById('dl').textContent = rnd(40,180).toFixed(1);
+  document.getElementById('ul').textContent = rnd(10,55).toFixed(1);
+  PING_VAL = rndInt(5,30);
+  document.getElementById('ping').textContent = `${PING_VAL} ms`;
 
-  const dl = randBetween(40, 200).toFixed(1);
-  const ul = randBetween(10, 60).toFixed(1);
-  document.getElementById('dlSpeed').textContent = dl;
-  document.getElementById('ulSpeed').textContent = ul;
-
-  const ping = Math.floor(randBetween(5, 30));
-  document.getElementById('pingVal').textContent = `${ping} ms`;
-
-  const freqs = ['2.4 GHz / CH 6','5 GHz / CH 36','5 GHz / CH 149','6 GHz / CH 5'];
-  document.getElementById('freqVal').textContent = freqs[Math.floor(Math.random()*freqs.length)];
+  const fqs = ['2.4 GHz / Kanal 6','5 GHz / Kanal 36','5 GHz / Kanal 149','6 GHz / Kanal 5'];
+  document.getElementById('freq').textContent = fqs[rndInt(0,fqs.length)];
 }
 
-function updateSignalBars() {
-  const pct = Math.min(100, Math.max(0, (signalStrength + 100) / 60 * 100));
-  const bars = Math.ceil(pct / 20);
-  document.querySelectorAll('.signal-bar').forEach((b, i) => {
-    b.classList.toggle('active', i < bars);
+function updateSigUI() {
+  const pct = Math.min(100,Math.max(0,(SIG+100)/60*100));
+  const bars = Math.ceil(pct/20);
+  for (let i=1;i<=5;i++) {
+    const el = document.getElementById('sb'+i);
+    if(el) el.classList.toggle('on', i<=bars);
+  }
+  document.getElementById('sigp').style.width = pct+'%';
+  document.getElementById('sigv').textContent = `${SIG} dBm`;
+  let q='A\'LO'; if(pct<30)q='YOMON'; else if(pct<50)q='O\'RTA'; else if(pct<70)q='YAXSHI';
+  document.getElementById('sigq').textContent = q;
+}
+
+// ========== DEVICES ==========
+function mkDevices(n) {
+  return Array.from({length:n},(_,i)=>({
+    id:i, name:DN[i%DN.length],
+    type:DT[rndInt(0,DT.length)],
+    sig:rndInt(-80,-35),
+    lat:LAT+(Math.random()-.5)*.012,
+    lng:LNG+(Math.random()-.5)*.012
+  }));
+}
+
+function renderDevices() {
+  document.getElementById('dlist').innerHTML = devices.map(d=>`
+    <div class="di">
+      <div class="dd"></div>
+      <div class="dn">${d.type} ${d.name}</div>
+      <div class="ds">${d.sig}dBm</div>
+    </div>`).join('');
+}
+
+function updateUserUI() {
+  const n = devices.length;
+  document.getElementById('ucnt').textContent = n;
+  document.getElementById('uicons').innerHTML =
+    Array.from({length:Math.min(n,12)},()=>`<div class="ui">◉</div>`).join('');
+}
+
+// ========== MAP ==========
+function initMap() {
+  map = L.map('map',{center:[LAT,LNG],zoom:15,zoomControl:false,attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+
+  // User marker
+  const ui = L.divIcon({
+    html:`<div style="width:18px;height:18px;border-radius:50%;
+      background:radial-gradient(circle,rgba(0,212,255,.9),rgba(0,212,255,.1));
+      border:2px solid #00d4ff;box-shadow:0 0 18px #00d4ff,0 0 36px rgba(0,212,255,.4)"></div>`,
+    iconSize:[18,18],iconAnchor:[9,9],className:''
   });
-  document.getElementById('signalProg').style.width = pct + '%';
-}
-
-function updateSignalCard() {
-  const pct = (signalStrength + 100) / 60 * 100;
-  let quality = 'EXCELLENT';
-  if (pct < 30) quality = 'POOR';
-  else if (pct < 50) quality = 'FAIR';
-  else if (pct < 70) quality = 'GOOD';
-  document.getElementById('signalVal').textContent = `${signalStrength} dBm`;
-  document.getElementById('signalQuality').textContent = quality;
-}
-
-// ==================== MAP ====================
-function initMap(lat, lng) {
-  map = L.map('map', {
-    center: [lat, lng],
-    zoom: 15,
-    zoomControl: false,
-    attributionControl: false
-  });
-
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19
-  }).addTo(map);
-
-  // Center marker (user)
-  const userIcon = L.divIcon({
-    html: `<div style="
-      width:20px;height:20px;border-radius:50%;
-      background:radial-gradient(circle, rgba(0,212,255,0.9), rgba(0,212,255,0.1));
-      border:2px solid #00d4ff;
-      box-shadow:0 0 20px #00d4ff, 0 0 40px rgba(0,212,255,0.5);
-      animation:pulse 1.5s ease-in-out infinite;
-    "></div>`,
-    iconSize: [20,20],
-    iconAnchor: [10,10],
-    className: ''
-  });
-  L.marker([lat, lng], {icon: userIcon}).addTo(map);
+  L.marker([LAT,LNG],{icon:ui}).addTo(map);
 
   // Device markers
-  devices.forEach(d => {
-    const dIcon = L.divIcon({
-      html: `<div style="
-        width:12px;height:12px;border-radius:50%;
-        background:radial-gradient(circle, rgba(0,255,136,0.9), rgba(0,255,136,0.1));
-        border:1px solid #00ff88;
-        box-shadow:0 0 10px #00ff88;
-        cursor:pointer;
-      " title="${d.name}"></div>`,
-      iconSize: [12,12],
-      iconAnchor: [6,6],
-      className: ''
+  devices.forEach(d=>{
+    const di = L.divIcon({
+      html:`<div style="width:11px;height:11px;border-radius:50%;
+        background:radial-gradient(circle,rgba(0,255,136,.85),rgba(0,255,136,.1));
+        border:1px solid #00ff88;box-shadow:0 0 9px #00ff88"></div>`,
+      iconSize:[11,11],iconAnchor:[5,5],className:''
     });
-    const m = L.marker([d.lat, d.lng], {icon: dIcon}).addTo(map);
-    m.bindPopup(`<div style="background:#020a12;color:#00d4ff;border:1px solid rgba(0,212,255,0.3);padding:8px;font-family:Share Tech Mono;font-size:12px;">
-      <b>${d.type} ${d.name}</b><br>
-      Signal: ${d.signal} dBm<br>
-      Status: ONLINE
-    </div>`, {className: 'cyber-popup'});
-    deviceMarkers.push(m);
+    L.marker([d.lat,d.lng],{icon:di})
+      .bindPopup(`<div style="background:#020a12;color:#00d4ff;border:1px solid rgba(0,212,255,.3);
+        padding:8px 10px;font-family:'Share Tech Mono',monospace;font-size:11px;min-width:140px">
+        <b style="color:#fff">${d.type} ${d.name}</b><br>
+        Signal: <span style="color:#00ff88">${d.sig} dBm</span><br>
+        Holat: <span style="color:#00ff88">● FAOL</span>
+      </div>`,{className:'',maxWidth:200})
+      .addTo(map);
   });
 }
 
-// ==================== SIGNAL CANVAS ====================
-function initSignalCanvas() {
-  signalCanvas = document.getElementById('signalCanvas');
-  signalCtx = signalCanvas.getContext('2d');
-  resizeSignalCanvas();
-  window.addEventListener('resize', resizeSignalCanvas);
+// ========== SIGNAL CANVAS ==========
+function initCanvas() {
+  sc = document.getElementById('sc');
+  sctx = sc.getContext('2d');
+  resizeSC();
+  window.addEventListener('resize', resizeSC);
 }
 
-function resizeSignalCanvas() {
-  const area = document.querySelector('.map-area');
-  signalCanvas.width = area.offsetWidth;
-  signalCanvas.height = area.offsetHeight;
-}
-
-let signalWaves = [];
-let waveTimer = 0;
-
-function spawnWave() {
-  signalWaves.push({ r: 0, maxR: 200 + Math.random()*100, alpha: 0.4, speed: 1.5 + Math.random() });
+function resizeSC() {
+  const mc = document.getElementById('mc');
+  sc.width = mc.offsetWidth;
+  sc.height = mc.offsetHeight;
 }
 
 function drawSignal() {
-  const ctx = signalCtx;
-  const w = signalCanvas.width, h = signalCanvas.height;
-  ctx.clearRect(0, 0, w, h);
-
-  const cx = w / 2, cy = h / 2;
-
-  // Signal strength heatmap glow
-  const pct = Math.min(1, Math.max(0, (signalStrength + 100) / 60));
-  const radius = 80 + pct * 120;
+  const c = sctx, w = sc.width, h = sc.height;
+  c.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2;
+  const pct = Math.min(1,Math.max(0,(SIG+100)/60));
 
   // Ambient glow
-  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2);
-  grad.addColorStop(0, `rgba(0,212,255,${0.06 * pct})`);
-  grad.addColorStop(0.4, `rgba(0,150,220,${0.04 * pct})`);
-  grad.addColorStop(1, 'transparent');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
+  const g = c.createRadialGradient(cx,cy,0,cx,cy,(120+pct*120));
+  g.addColorStop(0,`rgba(0,180,255,${.07*pct})`);
+  g.addColorStop(.5,`rgba(0,120,200,${.04*pct})`);
+  g.addColorStop(1,'transparent');
+  c.fillStyle=g; c.fillRect(0,0,w,h);
 
-  // Rings
-  for (let i = 1; i <= 4; i++) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * i / 2, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(0,212,255,${0.04 * pct * (5-i)/4})`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+  // Static rings
+  for(let i=1;i<=5;i++){
+    c.beginPath(); c.arc(cx,cy,(60+pct*100)*i/3,0,Math.PI*2);
+    c.strokeStyle=`rgba(0,212,255,${.05*pct*(6-i)/5})`;
+    c.lineWidth=1; c.stroke();
   }
 
-  // Device signals
-  if (map) {
-    devices.forEach(d => {
-      try {
-        const pt = map.latLngToContainerPoint([d.lat, d.lng]);
-        const dPct = Math.min(1, (d.signal + 100) / 60);
-        const dGrad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, 40 * dPct);
-        dGrad.addColorStop(0, `rgba(0,255,136,${0.15 * dPct})`);
-        dGrad.addColorStop(1, 'transparent');
-        ctx.fillStyle = dGrad;
-        ctx.fillRect(0, 0, w, h);
-      } catch(e) {}
+  // Device glows
+  if(map){
+    devices.forEach(d=>{
+      try{
+        const pt = map.latLngToContainerPoint([d.lat,d.lng]);
+        const dp2 = Math.min(1,(d.sig+100)/60);
+        const dg = c.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,35*dp2);
+        dg.addColorStop(0,`rgba(0,255,136,${.18*dp2})`);
+        dg.addColorStop(1,'transparent');
+        c.fillStyle=dg; c.fillRect(0,0,w,h);
+      }catch(e){}
     });
   }
 
-  // Expanding waves
-  waveTimer++;
-  if (waveTimer % 60 === 0) spawnWave();
-
-  signalWaves = signalWaves.filter(wave => wave.r < wave.maxR);
-  signalWaves.forEach(wave => {
-    wave.r += wave.speed;
-    const t = wave.r / wave.maxR;
-    const alpha = wave.alpha * (1 - t);
-    ctx.beginPath();
-    ctx.arc(cx, cy, wave.r, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(0,212,255,${alpha})`;
-    ctx.lineWidth = 2 * (1 - t) + 0.5;
-    ctx.stroke();
+  // Waves
+  wt++;
+  if(wt%55===0) waves.push({r:0,maxR:160+rnd(0,100),a:.4,spd:1.2+rnd(0,1)});
+  waves = waves.filter(w=>w.r<w.maxR);
+  waves.forEach(wv=>{
+    wv.r+=wv.spd;
+    const t=wv.r/wv.maxR, al=wv.a*(1-t);
+    c.beginPath(); c.arc(cx,cy,wv.r,0,Math.PI*2);
+    c.strokeStyle=`rgba(0,212,255,${al})`;
+    c.lineWidth=2*(1-t)+.5; c.stroke();
   });
 }
 
-// ==================== RADAR ====================
+// ========== RADAR ==========
 function initRadar() {
-  const canvas = document.getElementById('radarCanvas');
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  const cx = w/2, cy = h/2, r = w/2 - 10;
+  const cv = document.getElementById('rc'), c = cv.getContext('2d');
+  const w=cv.width,h=cv.height,cx=w/2,cy=h/2,R=w/2-8;
 
-  // Populate radar blips from devices
-  radarDots = devices.map(d => ({
-    angle: Math.random() * Math.PI * 2,
-    dist: Math.random() * r * 0.8,
-    size: 3 + Math.random() * 3,
-    alpha: 0.6 + Math.random() * 0.4,
-    fadeTimer: Math.floor(Math.random() * 120)
+  radarBlips = devices.map(()=>({
+    a:rnd(0,Math.PI*2), d:rnd(10,R*.85),
+    sz:2+rnd(0,3), al:.5+rnd(0,.5), t:rndInt(0,120)
   }));
 
-  function draw() {
-    ctx.clearRect(0, 0, w, h);
+  function draw(){
+    c.clearRect(0,0,w,h);
+    // BG
+    const bg=c.createRadialGradient(cx,cy,0,cx,cy,R);
+    bg.addColorStop(0,'rgba(0,35,16,.35)'); bg.addColorStop(1,'rgba(0,8,4,.08)');
+    c.fillStyle=bg; c.beginPath(); c.arc(cx,cy,R,0,Math.PI*2); c.fill();
 
-    // Background
-    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    bg.addColorStop(0, 'rgba(0,40,20,0.3)');
-    bg.addColorStop(1, 'rgba(0,10,5,0.1)');
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Grid circles
-    for (let i = 1; i <= 4; i++) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * i / 4, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(0,255,136,0.12)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+    // Grid
+    for(let i=1;i<=4;i++){
+      c.beginPath(); c.arc(cx,cy,R*i/4,0,Math.PI*2);
+      c.strokeStyle='rgba(0,255,136,.1)'; c.lineWidth=1; c.stroke();
     }
-
-    // Cross lines
-    ctx.strokeStyle = 'rgba(0,255,136,0.1)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(cx-r, cy); ctx.lineTo(cx+r, cy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, cy-r); ctx.lineTo(cx, cy+r); ctx.stroke();
+    c.strokeStyle='rgba(0,255,136,.08)'; c.lineWidth=1;
+    c.beginPath(); c.moveTo(cx-R,cy); c.lineTo(cx+R,cy); c.stroke();
+    c.beginPath(); c.moveTo(cx,cy-R); c.lineTo(cx,cy+R); c.stroke();
 
     // Sweep
-    radarAngle += 0.03;
-    const sweepGrad = ctx.createConicalGradient ? null : null;
-
-    // Draw sweep manually
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(radarAngle);
-    const sweep = ctx.createConicGradient ? ctx.createConicGradient(0, 0, 0) : null;
-
-    // Fallback sweep
-    for (let a = 0; a < Math.PI / 2; a += 0.05) {
-      const alpha = (1 - a / (Math.PI / 2)) * 0.15;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, r, -a, -a + 0.06);
-      ctx.fillStyle = `rgba(0,255,136,${alpha})`;
-      ctx.fill();
+    radarAngle+=.025;
+    c.save(); c.translate(cx,cy); c.rotate(radarAngle);
+    for(let a=0;a<Math.PI/2;a+=.04){
+      const al=(1-a/(Math.PI/2))*.12;
+      c.beginPath(); c.moveTo(0,0); c.arc(0,0,R,-a,-a+.05);
+      c.fillStyle=`rgba(0,255,136,${al})`; c.fill();
     }
-
-    // Sweep line
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(r, 0);
-    ctx.strokeStyle = 'rgba(0,255,136,0.8)';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = '#00ff88';
-    ctx.shadowBlur = 6;
-    ctx.stroke();
-    ctx.restore();
+    c.beginPath(); c.moveTo(0,0); c.lineTo(R,0);
+    c.strokeStyle='rgba(0,255,136,.85)'; c.lineWidth=1.5;
+    c.shadowColor='#00ff88'; c.shadowBlur=7; c.stroke();
+    c.restore();
 
     // Blips
-    radarDots.forEach(dot => {
-      dot.fadeTimer++;
-      const blink = Math.sin(dot.fadeTimer * 0.05) * 0.3 + 0.7;
-      const bx = cx + Math.cos(dot.angle) * dot.dist;
-      const by = cy + Math.sin(dot.angle) * dot.dist;
-      ctx.beginPath();
-      ctx.arc(bx, by, dot.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(0,255,136,${dot.alpha * blink})`;
-      ctx.shadowColor = '#00ff88';
-      ctx.shadowBlur = 8;
-      ctx.fill();
+    radarBlips.forEach(b=>{
+      b.t++;
+      const blink=Math.sin(b.t*.05)*.35+.65;
+      const bx=cx+Math.cos(b.a)*b.d, by=cy+Math.sin(b.a)*b.d;
+      c.beginPath(); c.arc(bx,by,b.sz,0,Math.PI*2);
+      c.fillStyle=`rgba(0,255,136,${b.al*blink})`;
+      c.shadowColor='#00ff88'; c.shadowBlur=8; c.fill();
     });
 
-    // Center dot
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#00d4ff';
-    ctx.shadowColor = '#00d4ff';
-    ctx.shadowBlur = 15;
-    ctx.fill();
+    // Center
+    c.beginPath(); c.arc(cx,cy,4,0,Math.PI*2);
+    c.fillStyle='#00d4ff'; c.shadowColor='#00d4ff'; c.shadowBlur=14; c.fill();
 
     // Border
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(0,255,136,0.3)';
-    ctx.lineWidth = 1;
-    ctx.shadowBlur = 0;
-    ctx.stroke();
+    c.beginPath(); c.arc(cx,cy,R,0,Math.PI*2);
+    c.strokeStyle='rgba(0,255,136,.28)'; c.lineWidth=1;
+    c.shadowBlur=0; c.stroke();
 
-    animFrames.radar = requestAnimationFrame(draw);
+    requestAnimationFrame(draw);
   }
   draw();
 }
 
-// ==================== LATENCY CANVAS ====================
-function initLatencyCanvas() {
-  const canvas = document.getElementById('latencyCanvas');
-  const ctx = canvas.getContext('2d');
-
-  // Fill initial data
-  for (let i = 0; i < 30; i++) {
-    pingHistory.push(Math.floor(randBetween(5, 40)));
-  }
-
-  function draw() {
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    const w = canvas.width, h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    if (pingHistory.length < 2) return;
-
-    const max = Math.max(...pingHistory) * 1.2;
-    const step = w / (pingHistory.length - 1);
-
-    // Fill
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    pingHistory.forEach((v, i) => {
-      ctx.lineTo(i * step, h - (v / max) * h * 0.9);
-    });
-    ctx.lineTo(w, h);
-    ctx.closePath();
-    const fill = ctx.createLinearGradient(0, 0, 0, h);
-    fill.addColorStop(0, 'rgba(255,238,0,0.15)');
-    fill.addColorStop(1, 'transparent');
-    ctx.fillStyle = fill;
-    ctx.fill();
-
-    // Line
-    ctx.beginPath();
-    pingHistory.forEach((v, i) => {
-      const x = i * step, y = h - (v / max) * h * 0.9;
-      i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-    });
-    ctx.strokeStyle = 'rgba(255,238,0,0.8)';
-    ctx.lineWidth = 1.5;
-    ctx.shadowColor = '#ffee00';
-    ctx.shadowBlur = 6;
-    ctx.stroke();
-
-    animFrames.latency = requestAnimationFrame(draw);
-  }
-  draw();
+// ========== LATENCY CANVAS ==========
+function initLatency() {
+  for(let i=0;i<32;i++) pingHist.push(rndInt(4,35));
+  drawLatency();
+  setInterval(()=>{
+    pingHist.push(Math.max(2,Math.min(80,pingHist[pingHist.length-1]+rndInt(-6,6))));
+    if(pingHist.length>32) pingHist.shift();
+    drawLatency();
+  },600);
 }
 
-// ==================== BANDWIDTH CANVAS ====================
-function initBandwidthCanvas() {
-  const canvas = document.getElementById('bandwidthCanvas');
-  const ctx = canvas.getContext('2d');
+function drawLatency() {
+  const cv = document.getElementById('lc');
+  cv.width = cv.offsetWidth || cv.parentElement.offsetWidth || 240;
+  const w=cv.width, h=cv.height, c=cv.getContext('2d');
+  c.clearRect(0,0,w,h);
+  if(pingHist.length<2) return;
+  const mx=Math.max(...pingHist)*1.25;
+  const step=w/(pingHist.length-1);
 
-  for (let i = 0; i < 40; i++) {
-    bwHistory.dl.push(randBetween(20, 200));
-    bwHistory.ul.push(randBetween(5, 60));
-  }
+  c.beginPath(); c.moveTo(0,h);
+  pingHist.forEach((v,i)=>c.lineTo(i*step,h-(v/mx)*h*.88));
+  c.lineTo(w,h); c.closePath();
+  const fg=c.createLinearGradient(0,0,0,h);
+  fg.addColorStop(0,'rgba(255,238,0,.18)'); fg.addColorStop(1,'transparent');
+  c.fillStyle=fg; c.fill();
 
-  function draw() {
-    canvas.width = canvas.offsetWidth || 260;
-    const w = canvas.width, h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    const maxDl = Math.max(...bwHistory.dl) * 1.1;
-
-    function drawLine(data, color, max) {
-      const step = w / (data.length - 1);
-      ctx.beginPath();
-      data.forEach((v, i) => {
-        const x = i * step, y = h - (v / max) * h * 0.85;
-        i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-      });
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 5;
-      ctx.stroke();
-    }
-
-    drawLine(bwHistory.dl, 'rgba(0,255,136,0.7)', maxDl);
-    drawLine(bwHistory.ul, 'rgba(0,212,255,0.7)', maxDl);
-
-    // Legend
-    ctx.font = '9px Share Tech Mono';
-    ctx.fillStyle = 'rgba(0,255,136,0.7)'; ctx.fillText('↓ DL', 4, 12);
-    ctx.fillStyle = 'rgba(0,212,255,0.7)'; ctx.fillText('↑ UL', 40, 12);
-
-    animFrames.bw = requestAnimationFrame(draw);
-  }
-  draw();
+  c.beginPath();
+  pingHist.forEach((v,i)=>{ const x=i*step,y=h-(v/mx)*h*.88; i?c.lineTo(x,y):c.moveTo(x,y); });
+  c.strokeStyle='rgba(255,238,0,.8)'; c.lineWidth=1.5;
+  c.shadowColor='#ffee00'; c.shadowBlur=5; c.stroke();
 }
 
-// ==================== FREQ BARS ====================
-function initFreqBars() {
-  const container = document.getElementById('freqBars');
-  freqData = Array.from({length: 20}, () => Math.random());
-  container.innerHTML = freqData.map(v =>
-    `<div class="freq-bar" style="height:${v*100}%"></div>`
-  ).join('');
+// ========== BANDWIDTH CANVAS ==========
+function initBW() {
+  for(let i=0;i<44;i++){dlHist.push(rnd(20,200));ulHist.push(rnd(5,55));}
+  drawBW();
+  setInterval(()=>{
+    dlHist.push(rnd(20,200)); ulHist.push(rnd(5,55));
+    if(dlHist.length>44){dlHist.shift();ulHist.shift();}
+    drawBW();
+    document.getElementById('dl').textContent=dlHist[dlHist.length-1].toFixed(1);
+    document.getElementById('ul').textContent=ulHist[ulHist.length-1].toFixed(1);
+  },900);
 }
 
-function updateFreqBars() {
-  freqData = freqData.map(v => Math.max(0.05, Math.min(1, v + (Math.random()-0.5)*0.3)));
-  const bars = document.querySelectorAll('.freq-bar');
-  bars.forEach((b, i) => {
-    b.style.height = (freqData[i] * 100) + '%';
-    b.style.opacity = 0.4 + freqData[i] * 0.6;
+function drawBW() {
+  const cv=document.getElementById('bwc');
+  cv.width=cv.offsetWidth||cv.parentElement.offsetWidth||250;
+  const w=cv.width,h=cv.height,c=cv.getContext('2d');
+  c.clearRect(0,0,w,h);
+  const mx=Math.max(...dlHist)*1.1;
+  const step=w/(dlHist.length-1);
+
+  function ln(data,col){
+    c.beginPath();
+    data.forEach((v,i)=>{ const x=i*step,y=h-(v/mx)*h*.85; i?c.lineTo(x,y):c.moveTo(x,y); });
+    c.strokeStyle=col; c.lineWidth=1.4; c.shadowColor=col; c.shadowBlur=5; c.stroke();
+  }
+  ln(dlHist,'rgba(0,255,136,.75)');
+  ln(ulHist,'rgba(0,212,255,.75)');
+
+  c.font='8px Share Tech Mono';
+  c.fillStyle='rgba(0,255,136,.7)'; c.fillText('↓ YUK',4,11);
+  c.fillStyle='rgba(0,212,255,.7)'; c.fillText('↑ YUB',38,11);
+}
+
+// ========== FREQ ==========
+function initFreq() {
+  freqVals = Array.from({length:22},()=>rnd(.05,1));
+  renderFreq();
+}
+function updateFreq() {
+  freqVals = freqVals.map(v=>Math.max(.05,Math.min(1,v+(rnd(0,1)-.5)*.28)));
+  renderFreq();
+}
+function renderFreq() {
+  const c=document.getElementById('fbars');
+  if(!c.children.length){
+    c.innerHTML=freqVals.map(()=>`<div class="fbar"></div>`).join('');
+  }
+  [...c.children].forEach((b,i)=>{
+    b.style.height=(freqVals[i]*100)+'%';
+    b.style.opacity=.35+freqVals[i]*.65;
   });
 }
 
-// ==================== DEVICE LIST ====================
-function renderDeviceList() {
-  const list = document.getElementById('deviceList');
-  list.innerHTML = devices.map(d => `
-    <div class="device-item">
-      <div class="device-dot"></div>
-      <div class="device-name">${d.type} ${d.name}</div>
-      <div class="device-signal">${d.signal}dBm</div>
-    </div>
-  `).join('');
+// ========== MAIN LOOP ==========
+function mainLoop(){
+  function frame(){ drawSignal(); requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
 }
 
-function updateUserCount() {
-  const count = devices.length;
-  document.getElementById('userCount').textContent = count;
-
-  // User icons
-  const icons = document.getElementById('userIcons');
-  icons.innerHTML = Array.from({length: Math.min(count, 12)}, (_, i) =>
-    `<div class="user-icon" title="${devices[i]?.name || ''}">◉</div>`
-  ).join('');
-}
-
-// ==================== LIVE UPDATE ====================
+// ========== LIVE UPDATE ==========
 function liveUpdate() {
-  // Signal drift
-  signalStrength = Math.max(-95, Math.min(-40, signalStrength + (Math.random()-0.5)*4));
-  updateSignalBars();
-  updateSignalCard();
+  SIG = Math.max(-95,Math.min(-35,SIG+(rnd(0,1)-.45)*5));
+  updateSigUI();
 
-  // Ping
-  const newPing = Math.max(2, Math.floor(pingHistory[pingHistory.length-1] + (Math.random()-0.4)*8));
-  pingHistory.push(newPing);
-  if (pingHistory.length > 30) pingHistory.shift();
-  document.getElementById('pingVal').textContent = `${newPing} ms`;
+  PING_VAL = Math.max(1,Math.min(100,PING_VAL+rndInt(-5,6)));
+  document.getElementById('ping').textContent=`${PING_VAL} ms`;
 
-  // Bandwidth
-  bwHistory.dl.push(randBetween(20, 200));
-  bwHistory.ul.push(randBetween(5, 60));
-  if (bwHistory.dl.length > 40) { bwHistory.dl.shift(); bwHistory.ul.shift(); }
-
-  const lastDl = bwHistory.dl[bwHistory.dl.length-1].toFixed(1);
-  const lastUl = bwHistory.ul[bwHistory.ul.length-1].toFixed(1);
-  document.getElementById('dlSpeed').textContent = lastDl;
-  document.getElementById('ulSpeed').textContent = lastUl;
-
-  // Device drift
-  devices.forEach(d => {
-    d.lat += (Math.random()-0.5)*0.0002;
-    d.lng += (Math.random()-0.5)*0.0002;
-    d.signal = Math.max(-95, Math.min(-30, d.signal + (Math.random()-0.5)*3));
-  });
-
-  // Random device join/leave
-  if (Math.random() < 0.1) {
-    if (devices.length < 16 && Math.random() < 0.6) {
+  // Occasionally add/remove device
+  if(rnd(0,1)<.12){
+    if(devices.length<14 && rnd(0,1)<.55){
       devices.push({
-        id: Date.now(),
-        name: deviceNames[Math.floor(Math.random()*deviceNames.length)],
-        signal: -40 - Math.floor(Math.random()*50),
-        type: ['📱','💻','🖥️','📺','🎮'][Math.floor(Math.random()*5)],
-        lat: userLat + (Math.random()-0.5)*0.01,
-        lng: userLng + (Math.random()-0.5)*0.01,
-        active: true
+        id:Date.now(),name:DN[rndInt(0,DN.length)],type:DT[rndInt(0,DT.length)],
+        sig:rndInt(-80,-35),lat:LAT+(rnd(0,1)-.5)*.012,lng:LNG+(rnd(0,1)-.5)*.012
       });
-    } else if (devices.length > 4) {
-      devices.splice(Math.floor(Math.random()*devices.length), 1);
+    } else if(devices.length>4){
+      devices.splice(rndInt(0,devices.length),1);
     }
-    renderDeviceList();
-    updateUserCount();
-    document.getElementById('devicePill').textContent = `${devices.length} DEVICES`;
+    renderDevices(); updateUserUI();
+    document.getElementById('dp').textContent=`${devices.length} QURILMA`;
   }
-
-  // Coverage fluctuation
-  document.getElementById('coveragePill').textContent =
-    `${Math.floor(randBetween(72,98))}% COVERAGE`;
+  document.getElementById('cvp').textContent=`${rndInt(72,98)}% QOPLAMA`;
 }
-
-// ==================== MAIN ANIMATION LOOP ====================
-function animateAll() {
-  function loop() {
-    drawSignal();
-    requestAnimationFrame(loop);
-  }
-  loop();
-}
-
-// ==================== WAVEFORM ANIMATION ====================
-function animateWaveform() {
-  const bars = document.querySelectorAll('.wave-bar');
-  bars.forEach((b, i) => {
-    b.style.animationDelay = `${i * 0.08}s`;
-    b.style.height = `${20 + Math.random()*20}px`;
-  });
-}
-
-// Add waveform bars
-document.querySelectorAll('.waveform').forEach(w => {
-  w.innerHTML = Array.from({length:16}, (_, i) =>
-    `<div class="wave-bar" style="animation-delay:${i*0.08}s;height:${8+Math.random()*32}px"></div>`
-  ).join('');
-});
-
 </script>
 </body>
-  </html>
+</html>
